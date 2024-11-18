@@ -2,11 +2,16 @@ name: Rust Build
 
 on:
   push:
-    branches: [ "master" ]
-    tags:
+    branches: 
+      - "master"
+      - "fix/**"
+      - "Fix/**"
       - 'v*'
   pull_request:
-    branches: [ "master" ]
+    branches: 
+      - "master"
+      - "fix/**"
+      - "Fix/**"
 
 env:
   CARGO_TERM_COLOR: always
