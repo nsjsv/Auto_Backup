@@ -17,11 +17,12 @@ codegen-units = 1
 panic = 'abort'
 strip = true
 
-[build]
-target = "x86_64-pc-windows-msvc"
-
 [target.'cfg(windows)'.build-dependencies]
 winres = "0.1"
 
 [target.'cfg(windows)']
-rustflags = ["-C", "target-feature=+crt-static"]
+# 修改rustflags配置
+rustflags = [
+    "-C", "target-feature=+crt-static",
+    "-C", "panic=abort"
+]
