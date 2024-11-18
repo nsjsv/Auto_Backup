@@ -16,6 +16,7 @@ on:
 
 env:
   CARGO_TERM_COLOR: always
+  RUSTFLAGS: "-C target-feature=+crt-static"
 
 jobs:
   build:
@@ -23,26 +24,34 @@ jobs:
     permissions: write-all
 
     steps:
-    - uses: actions/checkout@v4
-    
+    - name: 检出代码
+      uses: actions/checkout@v4
+      
     - name: 安装 Rust
       uses: dtolnay/rust-toolchain@stable
       with:
+        toolchain: 1.67.1
         targets: i686-pc-windows-msvc, x86_64-pc-windows-msvc
-        components: rust-src
+        components: rustfmt, clippy, rust-src
         
     - name: 缓存依赖
       uses: Swatinem/rust-cache@v2
-      
-    - name: 构建 x64 版本
+      with:
+        cache-directories: |
+          ~/.cargo/registry
+          ~/.cargo/git
+          target
+          
+    - name: 运行代码检查
       run: |
-        set RUSTFLAGS=-C target-feature=+crt-static
-        cargo build --release --target x86_64-pc-windows-msvc
+        cargo fmt -- --check
+        cargo clippy -- -D warnings
+        
+    - name: 构建 x64 版本
+      run: cargo build --release --target x86_64-pc-windows-msvc
       
     - name: 构建 x32 版本
-      run: |
-        set RUSTFLAGS=-C target-feature=+crt-static
-        cargo build --release --target i686-pc-windows-msvc
+      run: cargo build --release --target i686-pc-windows-msvc
       
     - name: 准备发布文件
       run: |
@@ -50,12 +59,18 @@ jobs:
         copy target/x86_64-pc-windows-msvc/release/auto_backup.exe release/auto_backup_x64.exe
         copy target/i686-pc-windows-msvc/release/auto_backup.exe release/auto_backup_x32.exe
         
+    - name: 生成版本号
+      if: startsWith(github.ref, 'refs/tags/')
+      id: get_version
+      run: echo "VERSION=${GITHUB_REF#refs/tags/}" >> $GITHUB_ENV
+        
     - name: 上传构建产物
       uses: actions/upload-artifact@v4
       with:
-        name: auto_backup
+        name: auto_backup-${{ github.sha }}
         path: release/
         if-no-files-found: error
+        retention-days: 5
 
     - name: 创建发布
       uses: softprops/action-gh-release@v1
@@ -65,5 +80,16 @@ jobs:
           release/auto_backup_x64.exe
           release/auto_backup_x32.exe
         fail_on_unmatched_files: true
+        draft: false
+        prerelease: false
+        body: |
+          ## Auto Backup ${{ env.VERSION }}
+          
+          ### 更新内容
+          - 自动构建发布
+          
+          ### 下载
+          - [64位版本](auto_backup_x64.exe)
+          - [32位版本](auto_backup_x32.exe)
       env:
         GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

@@ -1,4 +1,12 @@
 [toolchain]
 channel = "1.67.1"
-components = ["rustfmt", "clippy"]
-targets = ["i686-pc-windows-msvc", "x86_64-pc-windows-msvc"]
+components = [
+    "rustfmt",     # 代码格式化工具
+    "clippy",      # 代码质量检查工具
+    "rust-src"     # 源代码（对于某些依赖项是必需的）
+]
+targets = [
+    "i686-pc-windows-msvc",      # 32位 Windows
+    "x86_64-pc-windows-msvc"     # 64位 Windows
+]
+profile = "minimal"              # 最小化安装以加快CI速度

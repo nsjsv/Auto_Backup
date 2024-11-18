@@ -6,9 +6,10 @@ use rfd::FileDialog;
 use std::io;
 use std::path::Path;
 use chrono::Timelike;
+use serde::{Deserialize, Serialize};
 
 // 定义时间选择的枚举类型
-#[derive(PartialEq)]
+#[derive(PartialEq, Clone, Debug, Serialize, Deserialize)]
 enum TimeSelection {
     Second,
     Minute,
@@ -16,11 +17,26 @@ enum TimeSelection {
     Day,
 }
 
-// 为 TimeSelection 实现方法
+// 只保留实际使用的常量
+const SECONDS_PER_MINUTE: i32 = 60;
+
+// 为 TimeSelection 实现 Display trait 以支持显示
+impl std::fmt::Display for TimeSelection {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            TimeSelection::Second => write!(f, "Second"),
+            TimeSelection::Minute => write!(f, "Minute"),
+            TimeSelection::Hour => write!(f, "Hour"),
+            TimeSelection::Day => write!(f, "Day"),
+        }
+    }
+}
+
+// 优化 TimeSelection 实现
 impl TimeSelection {
     fn value(&self) -> i32 {
         match self {
-            TimeSelection::Second => 60,
+            TimeSelection::Second => SECONDS_PER_MINUTE,
             TimeSelection::Minute => 60,
             TimeSelection::Hour => 24,
             TimeSelection::Day => 30,
@@ -31,6 +47,26 @@ impl TimeSelection {
 impl Default for TimeSelection {
     fn default() -> Self {
         TimeSelection::Second
+    }
+}
+
+// 简化 BackupError
+#[derive(Debug)]
+enum BackupError {
+    IoError(io::Error),
+}
+
+impl From<io::Error> for BackupError {
+    fn from(error: io::Error) -> Self {
+        BackupError::IoError(error)
+    }
+}
+
+impl std::fmt::Display for BackupError {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            BackupError::IoError(e) => write!(f, "IO error: {}", e),
+        }
     }
 }
 
@@ -166,7 +202,7 @@ impl eframe::App for MyApp {
                 });
             });
 
-            // 如果选择了"天"作为备份周期，显示具体的备份时间说明
+            // 如果选择了"天"作为备份周期，显示具体备份时间说明
             if self.current_selection == TimeSelection::Day {
                 ui.label(format!("Backup will occur at {:02}:00 every day", self.daily_backup_hour));
             }
@@ -234,6 +270,9 @@ impl eframe::App for MyApp {
                     if ui.button("Backup").clicked() {
                         self.is_backup_up = true;
                         self.add_log("Backup started".to_string());
+                        if let Err(e) = self.save_config() {
+                            self.add_log(format!("Failed to save config: {}", e));
+                        }
                     }
                 });
 
@@ -306,6 +345,9 @@ impl eframe::App for MyApp {
                             self.is_backup_up = false;
                             self.show_confirm_dialog = false;
                             self.add_log("Backup stopped".to_string());
+                            if let Err(e) = self.save_config() {
+                                self.add_log(format!("Failed to save config: {}", e));
+                            }
                         }
                         if ui.button("Cancel").clicked() {
                             self.show_confirm_dialog = false;
@@ -320,9 +362,9 @@ impl eframe::App for MyApp {
 fn add_time(time: i32, current_selection: &TimeSelection) -> i32 {
     match current_selection {
         TimeSelection::Second => time,
-        TimeSelection::Minute => time * 60,
-        TimeSelection::Hour => time * 3600,
-        TimeSelection::Day => time * 86400,
+        TimeSelection::Minute => time * SECONDS_PER_MINUTE,
+        TimeSelection::Hour => time * (SECONDS_PER_MINUTE * 60),
+        TimeSelection::Day => time * (SECONDS_PER_MINUTE * 60 * 24),
     }
 }
 
@@ -362,7 +404,7 @@ impl MyApp {
     }
 
     fn validate_paths(&self) -> Result<(), String> {
-        // 添加错误处理
+        // 添加错误理
         if self.backup_path.is_empty() || self.save_path.is_empty() {
             return Err("Paths cannot be empty".to_string());
         }
@@ -417,55 +459,73 @@ impl MyApp {
             }
         }
     }
+
+    fn save_config(&self) -> Result<(), Box<dyn std::error::Error>> {
+        let config = Config {
+            backup_path: self.backup_path.clone(),
+            save_path: self.save_path.clone(),
+            daily_backup_hour: self.daily_backup_hour,
+            current_selection: self.current_selection.clone(),
+            time: self.time,
+        };
+        
+        let config_path = std::env::current_exe()?
+            .parent()
+            .ok_or("Failed to get executable directory")?
+            .join("config.json");
+            
+        let config_str = serde_json::to_string_pretty(&config)?;
+        std::fs::write(config_path, config_str)?;
+        Ok(())
+    }
+
+    fn load_config(&mut self) -> Result<(), Box<dyn std::error::Error>> {
+        let config_path = std::env::current_exe()?
+            .parent()
+            .ok_or("Failed to get executable directory")?
+            .join("config.json");
+            
+        if config_path.exists() {
+            let config_str = std::fs::read_to_string(config_path)?;
+            let config: Config = serde_json::from_str(&config_str)?;
+            
+            self.backup_path = config.backup_path;
+            self.save_path = config.save_path;
+            self.daily_backup_hour = config.daily_backup_hour;
+            self.current_selection = config.current_selection;
+            self.time = config.time;
+        }
+        Ok(())
+    }
 }
 
-fn main() -> eframe::Result<()> {
-    // 添加错误处理
-    std::panic::set_hook(Box::new(|panic_info| {
-        if let Some(location) = panic_info.location() {
-            eprintln!(
-                "程序发生错误 at {}:{}: {}",
-                location.file(),
-                location.line(),
-                panic_info
-            );
-        }
-    }));
+#[derive(Serialize, Deserialize)]
+struct Config {
+    backup_path: String,
+    save_path: String,
+    daily_backup_hour: i32,
+    current_selection: TimeSelection,
+    time: i32,
+}
 
+fn main() {
     let native_options = eframe::NativeOptions {
-        viewport: egui::ViewportBuilder::default()
-            .with_inner_size([440.0, 450.0])
-            .with_decorations(true)
-            .with_transparent(false), // 禁用透明
-        renderer: eframe::Renderer::Glow,  // 使用Glow渲染器
+        initial_window_size: Some(egui::vec2(440.0, 450.0)),
+        decorated: true,
+        transparent: false,
+        vsync: true,
+        multisampling: 0,
         ..Default::default()
     };
 
+    let mut app = MyApp::default();
+    if let Err(e) = app.load_config() {
+        eprintln!("Failed to load config: {}", e);
+    }
+
     eframe::run_native(
-        "Auto_Backup",
+        "Auto Backup",
         native_options,
-        Box::new(move |cc| {
-            // 配置字体
-            let mut fonts = egui::FontDefinitions::default();
-
-            // 添加得意黑字体
-            fonts.font_data.insert(
-                "SmileySans-Oblique".to_owned(),
-                egui::FontData::from_static(include_bytes!("..\\assets\\SmileySans-Oblique.ttf")),
-            );
-
-            // 将得意黑设置为默认字体
-            fonts
-                .families
-                .get_mut(&egui::FontFamily::Proportional)
-                .unwrap()
-                .insert(0, "SmileySans-Oblique".to_owned());
-
-            // 应用字体配置
-            cc.egui_ctx.set_fonts(fonts);
-
-            let app = MyApp::default();
-            Ok(Box::new(app))
-        }),
-    )
+        Box::new(move |_cc| Box::new(app)),
+    );
 }
