@@ -26,18 +26,6 @@ jobs:
         toolchain: stable
         targets: i686-pc-windows-msvc, x86_64-pc-windows-msvc
         components: rust-src
-    
-    - name: 安装 vcpkg
-      uses: lukka/run-vcpkg@v7
-      with:
-        vcpkgGitCommitId: 'a42af01b72c28a8e1d7b48107b33e4f286a55ef6'
-        vcpkgTriplet: 'x64-windows-static'
-        vcpkgArguments: '--no-downloads'
-        
-    - name: 创建 vcpkg 配置
-      run: |
-        mkdir -p ${{ github.workspace }}/.vcpkg
-        echo "set(VCPKG_BUILD_TYPE release)" > ${{ github.workspace }}/.vcpkg/vcpkg.json
         
     - name: 缓存依赖
       uses: Swatinem/rust-cache@v2
