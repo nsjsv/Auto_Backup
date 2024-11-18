@@ -10,7 +10,6 @@ on:
 
 env:
   CARGO_TERM_COLOR: always
-  RUSTFLAGS: "-C target-feature=+crt-static"
 
 jobs:
   build:
@@ -31,10 +30,25 @@ jobs:
       uses: Swatinem/rust-cache@v2
       
     - name: 构建 x64 版本
-      run: cargo build --release --target x86_64-pc-windows-msvc
+      run: |
+        set RUSTFLAGS=-C target-feature=+crt-static
+        cargo build --release --target x86_64-pc-windows-msvc --features panic_abort
       
     - name: 构建 x32 版本
-      run: cargo build --release --target i686-pc-windows-msvc
+      run: |
+        set RUSTFLAGS=-C target-feature=+crt-static
+        cargo build --release --target i686-pc-windows-msvc --features panic_abort
+      
+    - name: 检查构建产物
+      run: |
+        if not exist "target/x86_64-pc-windows-msvc/release/auto_backup.exe" (
+          echo "x64 构建失败"
+          exit 1
+        )
+        if not exist "target/i686-pc-windows-msvc/release/auto_backup.exe" (
+          echo "x32 构建失败"
+          exit 1
+        )
       
     - name: 准备发布文件
       run: |
@@ -47,6 +61,7 @@ jobs:
       with:
         name: auto_backup
         path: release/
+        if-no-files-found: error
 
     - name: 创建发布
       uses: softprops/action-gh-release@v1
@@ -55,5 +70,6 @@ jobs:
         files: |
           release/auto_backup_x64.exe
           release/auto_backup_x32.exe
+        fail_on_unmatched_files: true
       env:
         GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

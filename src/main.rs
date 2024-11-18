@@ -6,7 +6,6 @@ use rfd::FileDialog;
 use std::io;
 use std::path::Path;
 use chrono::Timelike;
-use std::fs;
 
 // 定义时间选择的枚举类型
 #[derive(PartialEq)]
@@ -363,33 +362,22 @@ impl MyApp {
     }
 
     fn validate_paths(&self) -> Result<(), String> {
-        // 检查备份路径
+        // 添加错误处理
+        if self.backup_path.is_empty() || self.save_path.is_empty() {
+            return Err("Paths cannot be empty".to_string());
+        }
+
+        // 使用更安全的路径检查
         let backup_path = Path::new(&self.backup_path);
+        let save_path = Path::new(&self.save_path);
+
         if !backup_path.exists() {
             return Err("Backup path does not exist".to_string());
         }
-        if !backup_path.is_dir() {
-            return Err("Backup path must be a directory".to_string());
-        }
-        
-        match fs::read_dir(backup_path) {
-            Ok(_) => {},
-            Err(_) => return Err("No read permission for backup path".to_string()),
-        }
 
-        // 检查保存路径
-        let save_path = Path::new(&self.save_path);
+        // 避免直接创建目录可能导致的问题
         if !save_path.exists() {
-            if let Err(e) = fs::create_dir_all(save_path) {
-                return Err(format!("Cannot create save path: {}", e));
-            }
-        }
-        
-        match fs::write(save_path.join("test_write"), "") {
-            Ok(_) => {
-                let _ = fs::remove_file(save_path.join("test_write"));
-            },
-            Err(_) => return Err("No write permission for save path".to_string()),
+            return Err("Save path does not exist".to_string());
         }
 
         Ok(())
@@ -397,6 +385,14 @@ impl MyApp {
 
     // 修改开始备份函数
     fn start_backup(&mut self) -> io::Result<()> {
+        // 添加额外的安全检查
+        if self.backup_path.is_empty() || self.save_path.is_empty() {
+            return Err(io::Error::new(
+                io::ErrorKind::InvalidInput,
+                "Paths cannot be empty"
+            ));
+        }
+
         if let Err(e) = self.validate_paths() {
             self.add_log(format!("Error: {}", e));
             return Err(io::Error::new(io::ErrorKind::Other, e));
@@ -424,10 +420,24 @@ impl MyApp {
 }
 
 fn main() -> eframe::Result<()> {
+    // 添加错误处理
+    std::panic::set_hook(Box::new(|panic_info| {
+        if let Some(location) = panic_info.location() {
+            eprintln!(
+                "程序发生错误 at {}:{}: {}",
+                location.file(),
+                location.line(),
+                panic_info
+            );
+        }
+    }));
+
     let native_options = eframe::NativeOptions {
         viewport: egui::ViewportBuilder::default()
             .with_inner_size([440.0, 450.0])
-            .with_decorations(true),
+            .with_decorations(true)
+            .with_transparent(false), // 禁用透明
+        renderer: eframe::Renderer::Glow,  // 使用Glow渲染器
         ..Default::default()
     };
 
