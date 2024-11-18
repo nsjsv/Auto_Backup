@@ -4,7 +4,7 @@ version = "0.1.0"
 edition = "2021"
 
 [dependencies]
-eframe = "*"
+eframe = { version = "*", features = ["default_fonts"] }
 egui = "*"
 rfd = "*"
 chrono = "*"
@@ -22,3 +22,6 @@ target = "x86_64-pc-windows-msvc"
 
 [target.'cfg(windows)'.build-dependencies]
 winres = "0.1"
+
+[target.'cfg(windows)']
+rustflags = ["-C", "target-feature=+crt-static"]
