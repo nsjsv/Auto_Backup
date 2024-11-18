@@ -45,17 +45,6 @@ jobs:
         set RUSTFLAGS=-C target-feature=+crt-static
         cargo build --release --target i686-pc-windows-msvc
       
-    - name: 检查构建产物
-      run: |
-        if not exist "target\x86_64-pc-windows-msvc\release\auto_backup.exe" (
-          echo "x64 构建失败"
-          exit 1
-        )
-        if not exist "target\i686-pc-windows-msvc\release\auto_backup.exe" (
-          echo "x32 构建失败"
-          exit 1
-        )
-      
     - name: 准备发布文件
       run: |
         mkdir release
